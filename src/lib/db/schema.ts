@@ -13,6 +13,8 @@ export const projects = sqliteTable("projects", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
   completedAt: integer("completed_at"),
+  /** JSON ScheduleOptions used for the last auto-schedule, or null if never scheduled. */
+  schedule: text("schedule"),
 });
 
 export const sections = sqliteTable(
@@ -46,6 +48,10 @@ export const tasks = sqliteTable(
     doneAt: integer("done_at"),
     position: integer("position").notNull(),
     createdAt: integer("created_at").notNull(),
+    // Calendar: local dates as YYYY-MM-DD (top-level tasks only); hours from Claude's estimate.
+    startDate: text("start_date"),
+    dueDate: text("due_date"),
+    estimateHours: real("estimate_hours"),
   },
   (t) => [
     index("tasks_project_idx").on(t.projectId),
@@ -65,7 +71,7 @@ export const aiUsage = sqliteTable(
   {
     id: text("id").primaryKey(),
     createdAt: integer("created_at").notNull(),
-    kind: text("kind", { enum: ["plan", "section", "expand", "test"] }).notNull(),
+    kind: text("kind", { enum: ["plan", "section", "expand", "estimate", "test"] }).notNull(),
     provider: text("provider", { enum: ["api", "cli"] }).notNull(),
     model: text("model").notNull(),
     // No foreign key: usage history outlives deleted projects (the name is kept for display).
@@ -82,4 +88,20 @@ export const aiUsage = sqliteTable(
     error: text("error"),
   },
   (t) => [index("ai_usage_created_idx").on(t.createdAt)],
+);
+
+/** Files or folders linked to a task. Only the path is stored; the file stays where it is. */
+export const taskFiles = sqliteTable(
+  "task_files",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    kind: text("kind", { enum: ["file", "folder"] }).notNull().default("file"),
+    position: integer("position").notNull(),
+    addedAt: integer("added_at").notNull(),
+  },
+  (t) => [index("task_files_task_idx").on(t.taskId)],
 );

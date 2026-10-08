@@ -1,7 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, GripVertical, ListPlus, MoreHorizontal, Pencil, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  FolderPlus,
+  GripVertical,
+  Link2,
+  ListPlus,
+  MoreHorizontal,
+  Paperclip,
+  Pencil,
+  Sparkles,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -15,6 +29,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AnimatedCheckbox } from "@/components/animated-checkbox";
 import { PrioritySelect } from "@/components/priority-select";
+import { DateChip, DateRangeEditor } from "@/components/date-range";
+import { AttachByPathDialog, TaskFiles } from "@/components/task-files";
+import { pickPaths } from "@/lib/client/files";
 import { cn } from "@/lib/utils";
 import type { TaskNode } from "@/lib/types";
 import { restrictToVerticalAxis } from "./dnd-modifiers";
@@ -34,6 +51,8 @@ export function TaskRow({ task, isSubtask = false }: { task: TaskNode; isSubtask
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [pathDialog, setPathDialog] = useState(false);
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -50,6 +69,19 @@ export function TaskRow({ task, isSubtask = false }: { task: TaskNode; isSubtask
   const subDone = task.subtasks.filter((s) => s.done).length;
   const hasSubs = task.subtasks.length > 0;
   const toggle = (done: boolean) => mutate({ type: "toggleTask", taskId: task.id, done });
+
+  const attachPaths = async (paths: string[]) => {
+    if (!paths.length) return;
+    const next = await mutate({ type: "addFiles", taskId: task.id, paths });
+    if (next) toast.success(paths.length === 1 ? "File linked" : `${paths.length} files linked`);
+  };
+  const pickAndAttach = async (kind: "files" | "folder") => {
+    try {
+      await attachPaths(await pickPaths(kind, `Attach to: ${task.title}`));
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   const onSubDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
@@ -156,9 +188,31 @@ export function TaskRow({ task, isSubtask = false }: { task: TaskNode; isSubtask
               </p>
             )
           )}
+          <TaskFiles
+            files={task.files}
+            onRemove={(fileId) => mutate({ type: "removeFile", fileId })}
+            className="mt-1.5"
+          />
         </div>
 
         <div className="flex shrink-0 items-center gap-1 pt-0.5">
+          {!isSubtask && (
+            <DateRangeEditor
+              start={task.startDate}
+              due={task.dueDate}
+              open={datesOpen}
+              onOpenChange={setDatesOpen}
+              onSave={(startDate, dueDate) => mutate({ type: "setTaskDates", taskId: task.id, startDate, dueDate })}
+            >
+              {task.startDate && task.dueDate ? (
+                <button type="button" tabIndex={-1} className="rounded-full" aria-label="Edit dates">
+                  <DateChip start={task.startDate} due={task.dueDate} done={task.done} />
+                </button>
+              ) : (
+                <span aria-hidden className="block h-5 w-0" />
+              )}
+            </DateRangeEditor>
+          )}
           {hasSubs && (
             <button
               onClick={() => setOpen((o) => !o)}
@@ -203,8 +257,21 @@ export function TaskRow({ task, isSubtask = false }: { task: TaskNode; isSubtask
                   <DropdownMenuItem onSelect={() => openExpand(task.id)}>
                     <Sparkles /> Expand into detailed steps
                   </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDatesOpen(true)}>
+                    <CalendarDays /> {task.dueDate ? "Change dates…" : "Set dates…"}
+                  </DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => pickAndAttach("files")}>
+                <Paperclip /> Attach files…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => pickAndAttach("folder")}>
+                <FolderPlus /> Attach folder…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setPathDialog(true)}>
+                <Link2 /> Link by path…
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => mutate({ type: "deleteTask", taskId: task.id })}>
                 <Trash2 /> Delete
@@ -213,6 +280,7 @@ export function TaskRow({ task, isSubtask = false }: { task: TaskNode; isSubtask
           </DropdownMenu>
         </div>
       </motion.div>
+      <AttachByPathDialog open={pathDialog} onOpenChange={setPathDialog} onAttach={attachPaths} />
 
       {!isSubtask && (
         <AnimatePresence initial={false}>

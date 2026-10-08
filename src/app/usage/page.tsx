@@ -14,6 +14,7 @@ const KIND_LABELS: Record<string, string> = {
   plan: "New project plans",
   section: "Regenerate section",
   expand: "Expand task",
+  estimate: "Duration estimates",
   test: "Connection tests",
 };
 

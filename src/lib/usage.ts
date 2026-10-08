@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import { aiUsage } from "./db/schema";
 import type { TokenUsage } from "./ai/types";
 
-export type UsageKind = "plan" | "section" | "expand" | "test";
+export type UsageKind = "plan" | "section" | "expand" | "estimate" | "test";
 
 export interface UsageRecordInput {
   kind: UsageKind;

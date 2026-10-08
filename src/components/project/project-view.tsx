@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -26,6 +26,7 @@ import { EditableText } from "./editable-text";
 import { PromptPanel } from "./prompt-panel";
 import { SectionCard } from "./section-card";
 import { ExportMenu } from "./export-menu";
+import { ScheduleDialog } from "./schedule-dialog";
 import type { UsageTotals } from "@/lib/usage";
 
 export function ProjectView({ usage }: { usage: UsageTotals }) {
@@ -53,6 +54,8 @@ export function ProjectView({ usage }: { usage: UsageTotals }) {
   };
 
   const [addingSection, setAddingSection] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const scheduled = project.sections.some((s) => s.tasks.some((t) => t.dueDate));
   const archived = project.status === "archived";
 
   return (
@@ -76,6 +79,10 @@ export function ProjectView({ usage }: { usage: UsageTotals }) {
             {project.summary && <p className="mt-2 text-muted-foreground">{project.summary}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setScheduling(true)}>
+              <CalendarDays /> {scheduled ? "Reschedule" : "Schedule"}
+            </Button>
+            <ScheduleDialog open={scheduling} onOpenChange={setScheduling} />
             <ExportMenu project={project} />
             <ConfirmButton
               title={archived ? "Restore this project?" : "Archive this project?"}

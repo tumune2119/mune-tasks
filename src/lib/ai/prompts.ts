@@ -31,6 +31,7 @@ export const DETAIL_LEVELS: Record<number, { label: string; guide: string }> = {
 const JSON_RULES = `Output rules (critical):
 - Respond with ONE JSON object and nothing else: no markdown fences, no commentary before or after.
 - Use double-quoted keys and strings, no trailing commas, no comments.
+- "estimateHours" is a realistic number of focused hours one person needs (e.g. 0.25, 1.5, 6). Give it for every task and subtask; a task with subtasks is estimated as the sum of its subtasks.
 - "priority" is one of "low", "med", "high" or null. Use "high" sparingly: at most about 1 in 5 items, only for blocking or critical work. Use null when there is no meaningful signal.
 - "notes" is a short string (max ~2 sentences) with useful specifics (commands, acceptance criteria, gotchas), or null. Never repeat the title in the notes.
 - Titles are short, start with a verb, and are specific to this project — avoid generic filler like "Plan the project" or "Do research".
@@ -67,8 +68,8 @@ Return exactly this shape:
         {
           "title": "Task title",
           "notes": "string or null",
-          "priority": "low" | "med" | "high" | null,
-          "subtasks": [ { "title": "Subtask title", "notes": "string or null", "priority": "low" | "med" | "high" | null } ]
+          "priority": "low" | "med" | "high" | null, "estimateHours": number,
+          "subtasks": [ { "title": "Subtask title", "notes": "string or null", "priority": "low" | "med" | "high" | null, "estimateHours": number } ]
         }
       ]
     }
@@ -129,8 +130,8 @@ Return exactly this shape:
 {
   "title": "Section title (keep the current one unless the user's guidance suggests otherwise)",
   "tasks": [
-    { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null,
-      "subtasks": [ { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null } ] }
+    { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null, "estimateHours": number,
+      "subtasks": [ { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null, "estimateHours": number } ] }
   ]
 }
 
@@ -143,7 +144,7 @@ export function expandSystemPrompt(): string {
 You are expanding ONE task into detailed, concrete steps. Each step is a single action that takes about 5–15 minutes, starts with a verb, and is specific enough that someone could start it immediately. Typically produce 4–10 steps in execution order, including any setup and verification needed.
 
 Return exactly this shape:
-{ "subtasks": [ { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null } ] }
+{ "subtasks": [ { "title": "...", "notes": "string or null", "priority": "low" | "med" | "high" | null, "estimateHours": number } ] }
 
 ${JSON_RULES}`;
 }
@@ -203,6 +204,37 @@ export function expandUserMessage(project: ProjectTree, section: SectionNode, ta
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// Duration estimates for an existing plan (used before putting it on the calendar)
+
+export function estimateSystemPrompt(): string {
+  return `${SHARED_INTRO}
+
+You are estimating how long each task of an existing plan takes, so it can be scheduled on a calendar. For every task id you are given, return a realistic number of focused hours for one person (e.g. 0.5, 2, 8). Count the subtasks listed under a task as part of it. Base estimates on the project description; don't pad them.
+
+Return exactly this shape:
+{ "estimates": [ { "id": "<task id as given>", "hours": number } ] }
+
+Output rules (critical):
+- Respond with ONE JSON object and nothing else: no markdown fences, no commentary.
+- Include every id exactly once, copied exactly.`;
+}
+
+export function estimateUserMessage(project: ProjectTree, items: { id: string; task: TaskNode; section: string }[]): string {
+  const list = items
+    .map(({ id, task, section }) => {
+      const notes = task.notes ? `\n    notes: ${task.notes}` : "";
+      const subs = task.subtasks.map((st) => `\n    - ${st.title}`).join("");
+      return `[${id}] ${task.title} (section: ${section})${notes}${subs}`;
+    })
+    .join("\n");
+  return [
+    projectContext(project),
+    `<tasks_to_estimate>\n${list}\n</tasks_to_estimate>`,
+    "Estimate every task now. Respond with the JSON object only.",
+  ].join("\n\n");
 }
 
 function escapeAttr(s: string) {

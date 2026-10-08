@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Code2, Loader2, RotateCcw, Save, Sparkles, Square, Wand2, X } from "lucide-react";
+import { CalendarDays, Code2, Loader2, RotateCcw, Save, Sparkles, Square, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { ScheduleFields, defaultSchedule, schedulePreview } from "@/components/project/schedule-dialog";
+import type { ProjectTree, ScheduleOptions } from "@/lib/types";
 import { FileDropzone, type UploadEntry } from "./file-dropzone";
 import { PlanPreview } from "./plan-preview";
 import { PlanEditor, countDraft, fromDraft, toDraft, type DraftPlan } from "./plan-editor";
@@ -23,6 +26,47 @@ import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "generating" | "review";
 const DRAFT_KEY = "mune-tasks:new-project-draft";
+
+/** Just enough of a project for the schedule preview, built from the unsaved plan. */
+function planAsTree(plan: Plan, detailLevel: number): ProjectTree {
+  const node = (t: { title: string; estimateHours?: number | null }, i: number, subs: ProjectTree["sections"][number]["tasks"] = []) => ({
+    id: `p${i}-${t.title}`,
+    sectionId: "",
+    parentId: null,
+    title: t.title,
+    notes: null,
+    priority: null,
+    done: false,
+    doneAt: null,
+    position: i,
+    startDate: null,
+    dueDate: null,
+    estimateHours: t.estimateHours ?? null,
+    files: [],
+    subtasks: subs,
+  });
+  return {
+    id: "draft",
+    name: plan.title,
+    summary: "",
+    prompt: "",
+    detailLevel,
+    itemCount: "",
+    extraInstructions: "",
+    attachments: [],
+    status: "active",
+    createdAt: 0,
+    updatedAt: 0,
+    completedAt: null,
+    schedule: null,
+    sections: plan.sections.map((sec, si) => ({
+      id: String(si),
+      title: sec.title,
+      position: si,
+      tasks: sec.tasks.map((t, ti) => node(t, si * 1000 + ti, (t.subtasks ?? []).map((st, j) => node(st, j)))),
+    })),
+  };
+}
 
 const LEVEL_HINTS: Record<number, string> = {
   1: "A handful of milestones, no subtasks",
@@ -47,6 +91,8 @@ export function NewProjectForm({ providerLabel }: { providerLabel: string }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPlan | null>(null);
   const [saving, setSaving] = useState(false);
+  const [scheduleOn, setScheduleOn] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduleOptions>(() => defaultSchedule());
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const rawRef = useRef<HTMLPreElement>(null);
@@ -139,6 +185,7 @@ export function NewProjectForm({ providerLabel }: { providerLabel: string }) {
       const { id } = await postJson<{ id: string }>("/api/projects", {
         plan,
         usageId: usage?.id,
+        schedule: scheduleOn ? schedule : null,
         meta: {
           prompt,
           detailLevel,
@@ -150,7 +197,7 @@ export function NewProjectForm({ providerLabel }: { providerLabel: string }) {
       try {
         localStorage.removeItem(DRAFT_KEY);
       } catch {}
-      toast.success("Project saved");
+      toast.success(scheduleOn ? "Project saved and added to your calendar" : "Project saved");
       router.push(`/projects/${id}`);
       router.refresh();
     } catch (err) {
@@ -239,6 +286,30 @@ export function NewProjectForm({ providerLabel }: { providerLabel: string }) {
                 className="rounded-xl bg-background/50"
               />
             </div>
+          </div>
+
+          <div className="space-y-4 rounded-xl bg-background/40 p-4 ring-1 ring-border">
+            <label className="flex items-start gap-2.5 text-sm font-medium">
+              <Switch checked={scheduleOn} onCheckedChange={setScheduleOn} aria-label="Schedule on calendar" className="mt-0.5" />
+              <span>
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="size-4 text-[#60a5fa]" /> Schedule on calendar
+                </span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  Optional. You can also schedule later from the project page.
+                </span>
+              </span>
+            </label>
+            {scheduleOn && (
+              <>
+                <ScheduleFields value={schedule} onChange={setSchedule} />
+                <p className="text-xs text-muted-foreground" data-testid="new-schedule-preview">
+                  {draft
+                    ? schedulePreview(planAsTree(fromDraft(draft), detailLevel), schedule)
+                    : "Claude estimates each task's hours; the tasks are placed on your calendar when you save."}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3 pt-1">

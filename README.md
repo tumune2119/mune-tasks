@@ -42,6 +42,7 @@ When an install or rebuild is needed, the console is shown so you can follow it.
 | Shortcut | Action |
 | --- | --- |
 | `N` | New project |
+| `C` | Calendar |
 | `/` | Focus search |
 | `Space` | Tick / untick the focused task |
 | `↑` `↓` (or `J` `K`) | Move between tasks |
@@ -49,7 +50,28 @@ When an install or rebuild is needed, the console is shown so you can follow it.
 | `→` `←` | Show / hide subtasks |
 | `Ctrl+Enter` | Generate (on the New project screen) |
 
-## Claude usage
+## Calendar
+
+Projects can be laid out on a calendar so you can see what to work on each day.
+
+- **When creating a project:** turn on **Schedule on calendar**, pick a start date, and choose either *hours per day* or a *finish by* date (plus whether weekends count). Claude estimates each task's hours while writing the plan, and the tasks are placed in plan order across your working days when you save.
+- **Later, for any project:** click **Schedule** (or **Reschedule**) on the project page. For plans made before estimates existed, leave *Ask Claude to estimate durations first* on, which is one small Claude request. **Remove from calendar** clears the dates.
+- **Change dates by hand:** click a task's date chip, or use the task menu → *Set dates…*. Only top-level tasks get dates; subtasks belong to their task.
+- **Calendar page** (`C`): **Month** shows each task on the days it covers, coloured by project. Drag a task to another day to move it. **Timeline** shows five weeks of bars per project with a line for today. Click any task to tick it, edit its dates or jump to its project. Overdue tasks are marked in red.
+- **Dashboard → Up next** lists overdue work, today's tasks and the next two days.
+
+The scheduler (`src/lib/schedule.ts`) is deterministic: it fills each working day up to the hours you set, or spreads the total evenly up to the finish-by date. Finished tasks keep their dates and aren't rescheduled.
+
+## Linked files
+
+Any task or subtask can have reference files, documents or folders attached. They're **linked by their location on your PC, not uploaded or copied**, so editing the file in its usual app is always reflected.
+
+- Task menu → **Attach files…** or **Attach folder…** opens the normal Windows picker. **Link by path…** lets you paste paths (in Explorer, Shift + right-click → *Copy as path*).
+- Click a file to **open it** in its default app. The folder icon **shows it in Explorer** with the file selected. The × removes the link only; the file itself is never touched.
+- Images show a small thumbnail. If a file is moved or deleted, it's flagged with a warning so you can re-link it.
+- Links are included in JSON backups. On another PC they'll show as missing unless the files exist at the same paths.
+
+
 
 Every request the app sends to Claude is logged: new-project plans, section regenerations, task expansions and connection tests. Open **Claude usage** in the sidebar to see:
 
@@ -79,6 +101,7 @@ npm run lint
 npm run build
 npm run test:e2e   # drives your Chrome against a running server (makes one real Claude call)
 node scripts/test-auto-exit.mjs   # checks the server stops when its last window closes (own port, no Claude calls)
+node scripts/test-calendar.mjs    # scheduling, calendar views, linked files, backups (own port; one small Claude call)
 ```
 
 `test:e2e` runs `scripts/e2e.mjs run`, which creates a project from a prompt and an attachment, edits it, and ticks tasks. After restarting the server, `node scripts/e2e.mjs verify <id> <percent>` checks that it all persisted, completes the project and archives it. Screenshots go to `e2e-output/`.

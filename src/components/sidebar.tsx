@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BarChart3, House, Plus, Search, Settings } from "lucide-react";
+import { BarChart3, CalendarDays, House, Plus, Search, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LogoMark, Wordmark } from "@/components/logo";
@@ -116,11 +116,12 @@ export function Sidebar({ projects, footer }: { projects: ProjectSummary[]; foot
 
       <div className="space-y-1 border-t border-sidebar-border p-3">
         <SideLink href="/" icon={<House className="size-4" />} label="Dashboard" active={pathname === "/"} />
+        <SideLink href="/calendar" icon={<CalendarDays className="size-4" />} label="Calendar" active={pathname === "/calendar"} />
         <SideLink href="/usage" icon={<BarChart3 className="size-4" />} label="Claude usage" active={pathname === "/usage"} />
         <SideLink href="/settings" icon={<Settings className="size-4" />} label="Settings" active={pathname === "/settings"} />
         {footer}
         <p className="px-2.5 pt-2 text-[0.68rem] leading-relaxed whitespace-nowrap text-muted-foreground/80">
-          <Kbd>N</Kbd> new · <Kbd>/</Kbd> search · <Kbd>Space</Kbd> tick · <Kbd>↑</Kbd><Kbd>↓</Kbd> move
+          <Kbd>N</Kbd> new · <Kbd>C</Kbd> calendar · <Kbd>/</Kbd> search · <Kbd>Space</Kbd> tick
         </p>
       </div>
     </aside>

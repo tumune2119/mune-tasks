@@ -65,6 +65,7 @@ export function insertTask(
       title: t.title,
       notes: t.notes ?? null,
       priority: t.priority ?? null,
+      estimateHours: t.estimateHours ?? null,
       done: false,
       position,
       createdAt: now,

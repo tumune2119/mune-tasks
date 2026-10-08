@@ -1,13 +1,18 @@
 import "server-only";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { getDb, type DB } from "./db";
-import { projects, sections, tasks } from "./db/schema";
+import { projects, sections, taskFiles, tasks } from "./db/schema";
+import { describeFile, checkLocalPath } from "./files";
+import { scheduleProject } from "./schedule";
 import { insertProject, insertSection, insertTask, type NewProjectInput } from "./db/write-plan";
 import type { ProjectAction } from "./project-actions";
 import { projectProgress } from "./progress";
 import type {
   AttachmentMeta,
   DashboardStats,
+  ScheduleOptions,
+  TaskFile,
   ProjectMeta,
   ProjectSummary,
   ProjectTree,
@@ -98,7 +103,17 @@ function toMeta(p: typeof projects.$inferSelect): ProjectMeta {
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     completedAt: p.completedAt,
+    schedule: parseSchedule(p.schedule),
   };
+}
+
+function parseSchedule(raw: string | null): ScheduleOptions | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function loadTree(db: DB | Tx, id: string): ProjectTree | null {
@@ -106,6 +121,19 @@ function loadTree(db: DB | Tx, id: string): ProjectTree | null {
   if (!p) return null;
   const secRows = db.select().from(sections).where(eq(sections.projectId, id)).orderBy(asc(sections.position)).all();
   const taskRows = db.select().from(tasks).where(eq(tasks.projectId, id)).orderBy(asc(tasks.position)).all();
+  const fileRows = db
+    .select({ id: taskFiles.id, taskId: taskFiles.taskId, path: taskFiles.path, kind: taskFiles.kind })
+    .from(taskFiles)
+    .innerJoin(tasks, eq(tasks.id, taskFiles.taskId))
+    .where(eq(tasks.projectId, id))
+    .orderBy(asc(taskFiles.position))
+    .all();
+  const filesByTask = new Map<string, TaskFile[]>();
+  for (const f of fileRows) {
+    const list = filesByTask.get(f.taskId) ?? [];
+    list.push(describeFile(f));
+    filesByTask.set(f.taskId, list);
+  }
 
   const byId = new Map<string, TaskNode>();
   for (const t of taskRows) {
@@ -119,6 +147,10 @@ function loadTree(db: DB | Tx, id: string): ProjectTree | null {
       done: t.done,
       doneAt: t.doneAt,
       position: t.position,
+      startDate: t.startDate,
+      dueDate: t.dueDate,
+      estimateHours: t.estimateHours,
+      files: filesByTask.get(t.id) ?? [],
       subtasks: [],
     });
   }
@@ -303,7 +335,91 @@ function applyInTx(tx: Tx, projectId: string, action: ProjectAction, now: number
       syncParent(tx, t.id, now);
       return;
     }
+
+    // ---- Calendar ----
+    case "setTaskDates": {
+      const t = getTaskIn(tx, projectId, action.taskId);
+      if (t.parentId) throw new Error("Only top-level tasks go on the calendar.");
+      // A single date means a one-day task; a reversed range is put in order.
+      let start = action.startDate ?? action.dueDate;
+      let due = action.dueDate ?? action.startDate;
+      if (start && due && due < start) [start, due] = [due, start];
+      tx.update(tasks).set({ startDate: start, dueDate: due }).where(eq(tasks.id, t.id)).run();
+      return;
+    }
+    case "setEstimates": {
+      for (const e of action.estimates) {
+        tx.update(tasks)
+          .set({ estimateHours: Math.round(e.hours * 100) / 100 })
+          .where(and(eq(tasks.id, e.taskId), eq(tasks.projectId, projectId)))
+          .run();
+      }
+      return;
+    }
+    case "schedule": {
+      const tree = loadTree(tx, projectId)!;
+      const { dates } = scheduleProject(tree, action.options);
+      for (const [taskId, d] of dates) {
+        tx.update(tasks).set({ startDate: d.start, dueDate: d.due }).where(eq(tasks.id, taskId)).run();
+      }
+      tx.update(projects).set({ schedule: JSON.stringify(action.options) }).where(eq(projects.id, projectId)).run();
+      return;
+    }
+    case "clearSchedule": {
+      tx.update(tasks).set({ startDate: null, dueDate: null }).where(eq(tasks.projectId, projectId)).run();
+      tx.update(projects).set({ schedule: null }).where(eq(projects.id, projectId)).run();
+      return;
+    }
+
+    // ---- Linked files ----
+    case "addFiles": {
+      const t = getTaskIn(tx, projectId, action.taskId);
+      const existing = new Set(
+        tx.select({ path: taskFiles.path }).from(taskFiles).where(eq(taskFiles.taskId, t.id)).all().map((r) => r.path.toLowerCase()),
+      );
+      const row = tx
+        .select({ max: sql<number | null>`MAX(${taskFiles.position})` })
+        .from(taskFiles)
+        .where(eq(taskFiles.taskId, t.id))
+        .get();
+      let pos = (row?.max ?? -1) + 1;
+      for (const raw of action.paths) {
+        const f = checkLocalPath(raw);
+        if (existing.has(f.path.toLowerCase())) continue;
+        existing.add(f.path.toLowerCase());
+        tx.insert(taskFiles).values({ id: nanoid(12), taskId: t.id, path: f.path, kind: f.kind, position: pos++, addedAt: now }).run();
+      }
+      return;
+    }
+    case "removeFile": {
+      const f = getFileIn(tx, projectId, action.fileId);
+      tx.delete(taskFiles).where(eq(taskFiles.id, f.id)).run();
+      return;
+    }
   }
+}
+
+/** A linked file, checked to belong to this project. */
+function getFileIn(tx: Tx | DB, projectId: string, fileId: string) {
+  const f = tx
+    .select({ id: taskFiles.id, path: taskFiles.path, kind: taskFiles.kind })
+    .from(taskFiles)
+    .innerJoin(tasks, eq(tasks.id, taskFiles.taskId))
+    .where(and(eq(taskFiles.id, fileId), eq(tasks.projectId, projectId)))
+    .get();
+  if (!f) throw new NotFoundError("Attachment not found");
+  return f;
+}
+
+/** Looks up a linked file by id alone (for open / reveal / preview). */
+export function getLinkedFile(fileId: string) {
+  const f = getDb()
+    .select({ id: taskFiles.id, path: taskFiles.path, kind: taskFiles.kind })
+    .from(taskFiles)
+    .where(eq(taskFiles.id, fileId))
+    .get();
+  if (!f) throw new NotFoundError("Attachment not found");
+  return f;
 }
 
 export function applyProjectAction(projectId: string, action: ProjectAction): ProjectTree {
@@ -365,6 +481,7 @@ export function importBackup(backup: BackupFile, mode: "merge" | "replace"): num
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
           completedAt: p.completedAt ?? null,
+          schedule: p.schedule ? JSON.stringify(p.schedule) : null,
         })
         .run();
       p.sections.forEach((s, si) => {
@@ -383,8 +500,16 @@ export function importBackup(backup: BackupFile, mode: "merge" | "replace"): num
               doneAt: t.doneAt ?? null,
               position: pos,
               createdAt: p.createdAt,
+              startDate: t.startDate ?? null,
+              dueDate: t.dueDate ?? null,
+              estimateHours: t.estimateHours ?? null,
             })
             .run();
+          (t.files ?? []).forEach((file, fi) =>
+            tx.insert(taskFiles)
+              .values({ id: file.id, taskId: t.id, path: file.path, kind: file.kind === "folder" ? "folder" : "file", position: fi, addedAt: p.createdAt })
+              .run(),
+          );
           (t.subtasks ?? []).forEach((st, i) => writeTask(st, t.id, i));
         };
         s.tasks.forEach((t, ti) => writeTask(t, null, ti));

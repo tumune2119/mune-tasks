@@ -2,6 +2,8 @@ import { CheckCheck, FolderKanban, Gauge } from "lucide-react";
 import { getDashboardStats, listProjectSummaries } from "@/lib/projects";
 import { ProjectBrowser } from "@/components/project-browser";
 import { ProgressBar } from "@/components/progress";
+import { UpNext } from "@/components/up-next";
+import { listCalendarTasks } from "@/lib/calendar";
 
 export default function HomePage() {
   const projects = listProjectSummaries();
@@ -36,6 +38,8 @@ export default function HomePage() {
           <ProgressBar percent={stats.overallPercent} thin className="mt-3" />
         </StatCard>
       </section>
+
+      <UpNext tasks={listCalendarTasks()} />
 
       <ProjectBrowser projects={projects} />
     </div>
