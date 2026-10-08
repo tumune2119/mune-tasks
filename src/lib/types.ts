@@ -17,7 +17,36 @@ export interface TaskNode {
   done: boolean;
   doneAt: number | null;
   position: number;
+  /** Calendar dates (YYYY-MM-DD, local). Only top-level tasks are scheduled. */
+  startDate: string | null;
+  dueDate: string | null;
+  estimateHours: number | null;
+  files: TaskFile[];
   subtasks: TaskNode[];
+}
+
+/** A file or folder linked to a task by its path on this PC (nothing is uploaded or copied). */
+export interface TaskFile {
+  id: string;
+  path: string;
+  name: string;
+  kind: "file" | "folder";
+  /** Lower-case extension without the dot, "" for folders. */
+  ext: string;
+  isImage: boolean;
+  /** False when the file was moved or deleted since it was attached. */
+  exists: boolean;
+}
+
+export interface ScheduleOptions {
+  /** First day to schedule work on (YYYY-MM-DD). */
+  start: string;
+  /** Optional finish-by date; when set, work is spread evenly up to it. */
+  end: string | null;
+  /** Focused hours per working day (used when there is no end date). */
+  hoursPerDay: number;
+  /** Schedule on Saturdays and Sundays too. */
+  weekends: boolean;
 }
 
 export interface SectionNode {
@@ -40,6 +69,7 @@ export interface ProjectMeta {
   createdAt: number;
   updatedAt: number;
   completedAt: number | null;
+  schedule: ScheduleOptions | null;
 }
 
 export interface ProjectTree extends ProjectMeta {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PlanSchema } from "@/lib/plan-schema";
-import { createProject, getDashboardStats, listProjectSummaries } from "@/lib/projects";
+import { applyProjectAction, createProject, getDashboardStats, listProjectSummaries } from "@/lib/projects";
+import { ScheduleOptionsSchema } from "@/lib/project-actions";
 import { linkUsageToProject } from "@/lib/usage";
 
 export async function GET() {
@@ -12,6 +13,8 @@ const Body = z.object({
   plan: PlanSchema,
   /** The usage-log id of the generation that produced this plan. */
   usageId: z.string().max(64).nullish(),
+  /** Put the new project on the calendar straight away. */
+  schedule: ScheduleOptionsSchema.nullish(),
   meta: z.object({
     prompt: z.string().default(""),
     detailLevel: z.number().int().min(1).max(5).default(3),
@@ -29,7 +32,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid plan" }, { status: 400 });
   }
-  const { plan, meta, usageId } = parsed.data;
+  const { plan, meta, usageId, schedule } = parsed.data;
   const id = createProject({
     name: plan.title,
     summary: plan.summary ?? "",
@@ -37,5 +40,6 @@ export async function POST(request: Request) {
     ...meta,
   });
   if (usageId) linkUsageToProject(usageId, id, plan.title);
+  if (schedule) applyProjectAction(id, { type: "schedule", options: schedule });
   return Response.json({ id }, { status: 201 });
 }

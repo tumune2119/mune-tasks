@@ -14,10 +14,17 @@ const notes = z.preprocess(
   z.string().trim().max(4000).nullish(),
 );
 
+/** Focused hours of work; anything unusable becomes null rather than failing the whole plan. */
+const estimateHours = z.preprocess((v) => {
+  const n = typeof v === "string" ? Number.parseFloat(v) : v;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 1000 ? n : null;
+}, z.number().nullable());
+
 export const SubtaskSchema = z.object({
   title: z.string().trim().min(1).max(300),
   notes,
   priority: priority.optional(),
+  estimateHours: estimateHours.optional(),
 });
 
 export const TaskSchema = SubtaskSchema.extend({
@@ -38,6 +45,11 @@ export const PlanSchema = z.object({
 export const ExpandSchema = z.object({
   subtasks: z.array(SubtaskSchema).min(1),
 });
+
+export const EstimateSchema = z.object({
+  estimates: z.array(z.object({ id: z.string().min(1), hours: z.number().positive().max(1000) })).min(1),
+});
+export type EstimateResult = z.infer<typeof EstimateSchema>;
 
 export type PlanSubtask = z.infer<typeof SubtaskSchema>;
 export type PlanTask = z.infer<typeof TaskSchema>;

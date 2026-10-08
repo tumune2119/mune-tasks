@@ -103,7 +103,31 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   error TEXT
 );
 CREATE INDEX IF NOT EXISTS ai_usage_created_idx ON ai_usage(created_at);
+CREATE TABLE IF NOT EXISTS task_files (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'file',
+  position INTEGER NOT NULL,
+  added_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_files_task_idx ON task_files(task_id);
 `;
+
+// Columns added after the first release; ALTER TABLE adds them to existing databases.
+const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
+  ["tasks", "start_date", "TEXT"],
+  ["tasks", "due_date", "TEXT"],
+  ["tasks", "estimate_hours", "REAL"],
+  ["projects", "schedule", "TEXT"],
+];
+
+function addMissingColumns(sqlite: Database.Database) {
+  for (const [table, column, ddl] of ADDED_COLUMNS) {
+    const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
+}
 
 function open(): DB {
   const file = getDbPath();
@@ -113,6 +137,7 @@ function open(): DB {
   sqlite.pragma("foreign_keys = ON");
   sqlite.pragma("busy_timeout = 5000");
   sqlite.exec(DDL);
+  addMissingColumns(sqlite);
   const db = drizzle(sqlite, { schema });
   seedIfEmpty(db);
   return db;

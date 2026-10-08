@@ -79,8 +79,23 @@ export function applyOptimistic(p: ProjectTree, a: ProjectAction): ProjectTree {
       list?.sort((x, y) => a.ids.indexOf(x.id) - a.ids.indexOf(y.id));
       break;
     }
+    case "setTaskDates": {
+      const f = findTask(a.taskId);
+      if (!f) break;
+      let start = a.startDate ?? a.dueDate;
+      let due = a.dueDate ?? a.startDate;
+      if (start && due && due < start) [start, due] = [due, start];
+      f.task.startDate = start;
+      f.task.dueDate = due;
+      break;
+    }
+    case "removeFile":
+      for (const s of next.sections)
+        for (const t of s.tasks)
+          for (const node of [t, ...t.subtasks]) node.files = node.files.filter((x) => x.id !== a.fileId);
+      break;
     default:
-      // addSection / addTask / replace* need server-generated ids — wait for the response.
+      // addSection / addTask / addFiles / schedule / replace* depend on the server — wait for the response.
       break;
   }
   return next;

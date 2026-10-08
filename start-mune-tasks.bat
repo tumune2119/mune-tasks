@@ -36,6 +36,8 @@ rem No build yet, or the source changed since the last one: build.
 node scripts\launcher-check.mjs build
 if not errorlevel 1 (
   echo [MUNE TASKS] Building...
+  rem Start from a clean folder: OneDrive can hold locks on old build files, which makes Next fail with EPERM.
+  if exist .next rd /s /q .next
   call npm run build
   if errorlevel 1 goto :fail
 )

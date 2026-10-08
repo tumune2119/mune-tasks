@@ -14,6 +14,8 @@ interface DraftItem {
   title: string;
   notes: string;
   priority: Priority | null;
+  /** Claude's estimate, carried through unchanged (used for calendar scheduling). */
+  estimateHours: number | null;
 }
 interface DraftTask extends DraftItem {
   subtasks: DraftItem[];
@@ -32,11 +34,12 @@ export interface DraftPlan {
 const k = () => crypto.randomUUID();
 
 export function toDraft(plan: Plan): DraftPlan {
-  const item = (t: { title: string; notes?: string | null; priority?: Priority | null }): DraftItem => ({
+  const item = (t: { title: string; notes?: string | null; priority?: Priority | null; estimateHours?: number | null }): DraftItem => ({
     key: k(),
     title: t.title,
     notes: t.notes ?? "",
     priority: t.priority ?? null,
+    estimateHours: t.estimateHours ?? null,
   });
   return {
     title: plan.title,
@@ -51,7 +54,12 @@ export function toDraft(plan: Plan): DraftPlan {
 
 /** Back to the API shape; drops empty rows and empty sections. */
 export function fromDraft(d: DraftPlan): Plan {
-  const item = (i: DraftItem) => ({ title: i.title.trim(), notes: i.notes.trim() || null, priority: i.priority });
+  const item = (i: DraftItem) => ({
+    title: i.title.trim(),
+    notes: i.notes.trim() || null,
+    priority: i.priority,
+    estimateHours: i.estimateHours,
+  });
   return {
     title: d.title.trim() || "Untitled project",
     summary: d.summary.trim() || null,
@@ -135,7 +143,7 @@ export function PlanEditor({ draft, onChange }: { draft: DraftPlan; onChange: (d
             size="sm"
             className="mt-1 text-muted-foreground"
             onClick={() =>
-              set((d) => void d.sections[si].tasks.push({ key: k(), title: "", notes: "", priority: null, subtasks: [] }))
+              set((d) => void d.sections[si].tasks.push({ key: k(), title: "", notes: "", priority: null, estimateHours: null, subtasks: [] }))
             }
           >
             <Plus /> Add task
@@ -230,7 +238,7 @@ function DraftTaskRow({
             variant="ghost"
             size="xs"
             className="text-muted-foreground"
-            onClick={() => onChange((t) => void t.subtasks.push({ key: k(), title: "", notes: "", priority: null }))}
+            onClick={() => onChange((t) => void t.subtasks.push({ key: k(), title: "", notes: "", priority: null, estimateHours: null }))}
           >
             <Plus /> Subtask
           </Button>

@@ -20,6 +20,12 @@ const Task: z.ZodType<unknown> = z.lazy(() =>
     priority: z.enum(["low", "med", "high"]).nullish(),
     done: z.boolean(),
     doneAt: z.number().nullish(),
+    startDate: z.string().nullish(),
+    dueDate: z.string().nullish(),
+    estimateHours: z.number().nullish(),
+    files: z
+      .array(z.object({ id: z.string().min(1), path: z.string().min(1), kind: z.enum(["file", "folder"]).default("file") }))
+      .default([]),
     subtasks: z.array(Task).default([]),
   }),
 );
@@ -41,6 +47,9 @@ const Backup = z.object({
       createdAt: z.number(),
       updatedAt: z.number(),
       completedAt: z.number().nullish(),
+      schedule: z
+        .object({ start: z.string(), end: z.string().nullable(), hoursPerDay: z.number(), weekends: z.boolean() })
+        .nullish(),
       sections: z.array(z.object({ id: z.string().min(1), title: z.string(), tasks: z.array(Task) })),
     }),
   ),

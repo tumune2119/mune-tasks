@@ -24,13 +24,16 @@ export function AppShell({
   const router = useRouter();
   const { stopped, setStopped } = useAppPresence(launched);
 
-  // Global shortcuts: N = new project, / = focus search. (Space/arrows live on task rows.)
+  // Global shortcuts: N = new project, C = calendar, / = focus search. (Space/arrows live on task rows.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
       if (e.key === "n" || e.key === "N") {
         e.preventDefault();
         router.push("/new");
+      } else if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        router.push("/calendar");
       } else if (e.key === "/") {
         e.preventDefault();
         const el =
