@@ -6,7 +6,7 @@ A personal, local-only todo app. Describe a project (plus optional files), pick 
 
 The app was previously called Taskforge. On first start after the rename, `data\taskforge.db` is moved to `data\mune-tasks.db` automatically, and old backups still import.
 
-Requirements: **Node.js 20 or newer** (`node -v`). Chrome or Edge is recommended for the app-window experience.
+Requirements: **Node.js 22 or newer** (`node -v`). Chrome or Edge is recommended for the app-window experience.
 
 1. **Pick how MUNE TASKS talks to Claude** (either works):
    - **Claude Code CLI (no setup if you already use Claude Code):** MUNE TASKS finds `claude` on your PATH, in `%USERPROFILE%\.local\bin`, or the copy bundled with the VS Code extension, and runs on your Claude subscription.
@@ -117,5 +117,5 @@ node scripts/test-calendar.mjs    # scheduling, calendar views, linked files, ba
 
 ### Notes
 
-- `better-sqlite3` is pinned to `12.9.0`: newer releases no longer ship prebuilt binaries for Node 20, and building from source needs Python plus Visual Studio build tools. Node 20 is past end-of-life. After upgrading to Node 22 or 24 you can move to the latest `better-sqlite3`.
+- `better-sqlite3` 13 ships one Node-API binary that works on Node 22 and every later version, so Node updates no longer need a rebuild. If you ever see `NODE_MODULE_VERSION` errors after changing Node, run `npm rebuild better-sqlite3`.
 - App icons live in `public/icons` and are regenerated with `npm run icons`.
